@@ -481,10 +481,10 @@ namespace GotaSoundIO.IO {
         /// </summary>
         /// <param name="fileHeader">The output file header.</param>
         /// <param name="setOffset">Whether or not to set the current offset.</param>
-        public void OpenFile<T>(out FileHeader fileHeader, bool setOffset = true) {
+        public void OpenFile<T>(out FileHeader fileHeader, bool setOffset = true) where T : FileHeader {
             FileOffset = Position;
             if (setOffset) CurrentOffset = Position;
-            fileHeader = Read<T>() as FileHeader;
+            fileHeader = Read<T>();
             BlockOffsets = fileHeader.BlockOffsets;
             BlockSizes = fileHeader.BlockSizes;
         }
@@ -523,10 +523,12 @@ namespace GotaSoundIO.IO {
         /// </summary>
         /// <typeparam name="T">Soundfile type.</typeparam>
         /// <returns>The file.</returns>
-        public IOFile ReadFile<T>() {
+        public T ReadFile<T>() where T : IOFile {
             FileReader r = new FileReader(BaseStream);
             r.Position = Position;
-            IOFile f = r.Read<T>() as IOFile;
+            r.CurrentOffset = r.Position;
+            r.FileOffset = r.Position;
+            T f = r.Read<T>();
             Position = r.Position;
             return f;
         }

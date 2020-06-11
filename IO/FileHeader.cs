@@ -27,6 +27,11 @@ namespace GotaSoundIO.IO {
         public Version Version;
 
         /// <summary>
+        /// Block types.
+        /// </summary>
+        public long[] BlockTypes;
+
+        /// <summary>
         /// Block offsets.
         /// </summary>
         public long[] BlockOffsets;

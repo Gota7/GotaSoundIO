@@ -103,7 +103,7 @@ namespace GotaSoundIO.Sound {
         /// <param name="blockSamples">Samples per block.</param>
         /// <returns>The size of the last block.</returns>
         public override uint LastBlockSize(uint blockSize, uint blockSamples) {
-            uint num = (uint)samples.Length % blockSamples * 2;
+            uint num = (uint)samples.Length % (blockSamples * 2);
             if (num == 0) { num = blockSize; }
             return num;
         }

@@ -123,6 +123,16 @@ namespace GotaSoundIO.IO {
         }
 
         /// <summary>
+        /// Duplicate this file.
+        /// </summary>
+        /// <returns>A duplicate of this file.</returns>
+        public T Duplicate<T>() where T : IOFile {
+            T ret = Activator.CreateInstance<T>();
+            ret.Read(Write());
+            return ret;
+        }
+
+        /// <summary>
         /// Md5Sum hash.
         /// </summary>
         public string Md5Sum {

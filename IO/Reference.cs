@@ -114,8 +114,9 @@ namespace GotaSoundIO.IO {
                 //Identifier.
                 T obj;
                 if (DataTypes.Count > 0) {
-                    if (Identifier - 1 < DataTypes.Count && Identifier != 0) {
-                        obj = (T)Activator.CreateInstance(DataTypes[Identifier - 1]);
+                    Type type = Identifier < DataTypes.Count ? DataTypes[Identifier] : null;
+                    if (type != null) {
+                        obj = (T)Activator.CreateInstance(type);
                     } else {
                         obj = default(T);
                     }
@@ -200,7 +201,7 @@ namespace GotaSoundIO.IO {
                         try {
                             var h = Convert.ChangeType(Data, DataTypes[i]);
                             if (h != null) {
-                                Identifier = i + 1;
+                                Identifier = i;
                             }
                         } catch { }
                     }

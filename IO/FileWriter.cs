@@ -46,6 +46,11 @@ namespace GotaSoundIO.IO {
         /// Block sizes.
         /// </summary>
         public List<long> BlockSizes = new List<long>();
+        
+        /// <summary>
+        /// Block types.
+        /// </summary>
+        public List<long> BlockTypes = new List<long>();
 
         /// <summary>
         /// References.
@@ -399,10 +404,7 @@ namespace GotaSoundIO.IO {
         /// </summary>
         /// <param name="f">The file to write.</param>
         public void WriteFile(IOFile f) {
-            FileWriter w = new FileWriter(BaseStream);
-            w.Position = Position;
-            w.Write(f);
-            Position = w.Position;
+            Write(f.Write());
         }
 
         /// <summary>
@@ -423,6 +425,7 @@ namespace GotaSoundIO.IO {
             Header.Magic = magic;
             Header.BlockOffsets = new long[numBlocks];
             Header.BlockSizes = new long[numBlocks];
+            Header.BlockTypes = new long[numBlocks];
             Write(Header);
             Header.HeaderSize = Position - FileOffset;
 
@@ -436,6 +439,7 @@ namespace GotaSoundIO.IO {
             //Set Write properties.
             Header.BlockOffsets = BlockOffsets.ToArray();
             Header.BlockSizes = BlockSizes.ToArray();
+            Header.BlockTypes = BlockTypes.ToArray();
             Header.FileSize = Position - FileOffset;
             long bak = Position;
             Position = FileOffset;
@@ -450,10 +454,12 @@ namespace GotaSoundIO.IO {
         /// <param name="magic">The magic.</param>
         /// <param name="writeMagicAndSize">Whether or not to write the magic.</param>
         /// <param name="setOffset">If the offset should be set or not.</param>
-        public void InitBlock(string magic, bool writeMagicAndSize = true, bool setOffset = true) {
+        /// <param name="blockType">Block type.</param>
+        public void InitBlock(string magic, bool writeMagicAndSize = true, bool setOffset = true, long blockType = 0) {
 
             //Add the block offset.
             BlockOffsets.Add(Position);
+            BlockTypes.Add(blockType);
 
             //Write magic and size.
             if (writeMagicAndSize) {

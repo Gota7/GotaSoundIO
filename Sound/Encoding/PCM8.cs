@@ -89,7 +89,9 @@ namespace GotaSoundIO.Sound {
         /// <param name="lastBlockSize">The size of the last block.</param>
         /// <param name="lastBlockSamples">Samples in the last block.</param>
         public override void InitFromBlocks(uint blockCount, uint blockSize, uint blockSamples, uint lastBlockSize, uint lastBlockSamples) {
-            throw new NotImplementedException();
+            samples = new byte[(blockCount - 1) * blockSamples + lastBlockSamples];
+            NumSamples = (int)((blockCount - 1) * blockSamples + lastBlockSamples);
+            DataSize = NumSamples;
         }
 
         /// <summary>
@@ -99,7 +101,9 @@ namespace GotaSoundIO.Sound {
         /// <param name="blockSamples">Samples per block.</param>
         /// <returns>The number of blocks.</returns>
         public override uint NumBlocks(uint blockSize, uint blockSamples) {
-            throw new NotImplementedException();
+            uint num = (uint)samples.Length / blockSamples;
+            if (samples.Length % blockSamples != 0) { num++; }
+            return num;
         }
 
         /// <summary>
@@ -109,7 +113,9 @@ namespace GotaSoundIO.Sound {
         /// <param name="blockSamples">Samples per block.</param>
         /// <returns>The size of the last block.</returns>
         public override uint LastBlockSize(uint blockSize, uint blockSamples) {
-            throw new NotImplementedException();
+            uint num = (uint)samples.Length % blockSamples;
+            if (num == 0) { num = blockSize; }
+            return num;
         }
 
         /// <summary>
@@ -119,7 +125,9 @@ namespace GotaSoundIO.Sound {
         /// <param name="blockSamples">Samples per block.</param>
         /// <returns>The amount of samples in the last block.</returns>
         public override uint LastBlockSamples(uint blockSize, uint blockSamples) {
-            throw new NotImplementedException();
+            uint num = (uint)samples.Length % blockSamples;
+            if (num == 0) { num = blockSamples; }
+            return num;
         }
 
         /// <summary>
@@ -130,7 +138,8 @@ namespace GotaSoundIO.Sound {
         /// <param name="blockSize"></param>
         /// <param name="blockSamples"></param>
         public override void ReadBlock(FileReader r, int blockNum, uint blockSize, uint blockSamples) {
-            throw new NotImplementedException();
+            byte[] arr = r.ReadBytes(blockNum == NumBlocks(blockSize, blockSamples) - 1 ? (int)LastBlockSamples(blockSize, blockSamples) : (int)blockSamples);
+            arr.CopyTo(samples, blockSize * blockNum);
         }
 
         /// <summary>
@@ -141,7 +150,7 @@ namespace GotaSoundIO.Sound {
         /// <param name="blockSize">Size of each block.</param>
         /// <param name="blockSamples">Samples per block.</param>
         public override void WriteBlock(FileWriter w, int blockNum, uint blockSize, uint blockSamples) {
-            throw new NotImplementedException();
+            w.Write(samples.SubArray(blockNum * (int)blockSize, blockNum == NumBlocks(blockSize, blockSamples) - 1 ? (int)LastBlockSize(blockSize, blockSamples) : (int)blockSize));
         }
 
     }
