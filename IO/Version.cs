@@ -9,7 +9,7 @@ namespace GotaSoundIO.IO {
     /// <summary>
     /// Version.
     /// </summary>
-    public abstract class Version : IReadable, IWritable {
+    public abstract class Version : IReadable, IWriteable {
 
         /// <summary>
         /// Major version.

@@ -1,183 +1,313 @@
 ﻿using GotaSoundIO.IO;
+using GotaSoundIO.Sound.Encoding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using VGAudio.Codecs.GcAdpcm;
+using VGAudio.Utilities;
 
 namespace GotaSoundIO.Sound {
-
+    
     /// <summary>
-    /// DspAdpcm Encoding.
+    /// DSP-ADPCM encoding.
     /// </summary>
-    public class DspAdpcm : AudioEncoding {
-        
-        /// <summary>
-        /// Sample data.
-        /// </summary>
-        private byte[] samples;
+    public class DspAdpcm : IAudioEncoding {
 
         /// <summary>
-        /// PCM16 samples for retrieving SEEK info.
+        /// Data.
         /// </summary>
-        private List<short[]> pcm16History = new List<short[]>();
+        private byte[] Data;
 
         /// <summary>
-        /// Samples per block when using seek.
-        /// </summary>
-        private uint seekBlockSamples;
-
-        /// <summary>
-        /// DspAdpcm context.
+        /// Encoding context.
         /// </summary>
         public DspAdpcmContext Context;
 
         /// <summary>
-        /// Loop start.
+        /// Number of samples contained.
         /// </summary>
-        /// <returns>Loop start info.</returns>
-        public uint LoopStart;
+        /// <returns>Number of samples.</returns>
+        public int SampleCount() => DspAdpcmMath.ByteCountToSampleCount(Data.Length);
 
         /// <summary>
-        /// Samples to nibbles.
+        /// Data size contained.
         /// </summary>
-        /// <param name="samples">Number of samples.</param>
-        /// <returns>The number of nibbles.</returns>
-        public static uint Samples2Nibbles(uint samples) {
-            uint numFrames = samples / 14;
-            uint remainingSamples = samples % 14;
-            return numFrames * 16 + remainingSamples + 2;
+        /// <returns>Data size.</returns>
+        public int DataSize() => Data.Length;
+
+        /// <summary>
+        /// Get the number of samples from a block size.
+        /// </summary>
+        /// <param name="blockSize">Block size to get the number of samples from.</param>
+        /// <returns>Number of samples.</returns>
+        public int SamplesFromBlockSize(int blockSize) => DspAdpcmMath.ByteCountToSampleCount(blockSize);
+
+        /// <summary>
+        /// Raw data.
+        /// </summary>
+        /// <returns>Raw data.</returns>
+        public object RawData() => Data;
+
+        /// <summary>
+        /// Read the raw data.
+        /// </summary>
+        /// <param name="r">File reader.</param>
+        /// <param name="numSamples">Number of samples.</param>
+        /// <param name="dataSize">Data size.</param>
+        public void ReadRaw(FileReader r, uint numSamples, uint dataSize) {
+            Data = r.ReadBytes((int)(dataSize));
         }
 
         /// <summary>
-        /// Nibbles to samples.
+        /// Write the raw data.
         /// </summary>
-        /// <param name="nibbles">The amount of nibbles.</param>
-        /// <returns>The number of samples.</returns>
-        public static uint Nibbles2Samples(uint nibbles) {
-            uint numFrames = nibbles / 16;
-            uint remainingNibbles = nibbles % 16;
-            return numFrames * 14 + (remainingNibbles - 2);
+        /// <param name="w">File writer.</param>
+        public void WriteRaw(FileWriter w) {
+            w.Write(Data);
         }
 
         /// <summary>
-        /// Get the PCM16 samples.
+        /// Convert from floating point PCM to the data.
         /// </summary>
-        /// <returns>The PCM16 samples.</returns>
-        public override short[] ToPCM16() {
-            short[] pcm16 = new short[NumSamples];
-            DspAdpcmDecoder.Decode(samples, ref pcm16, ref Context, (uint)NumSamples);
-            return pcm16;
+        /// <param name="pcm">PCM data.</param>
+        /// <param name="encodingData">Encoding data.</param>
+        /// <param name="loopStart">Loop start.</param>
+        /// <param name="loopEnd">Loop end.</param>
+        public void FromFloatPCM(float[] pcm, object encodingData = null, int loopStart = -1, int loopEnd = -1) {
+
+            //Convert data.
+            short[] s = pcm.Select(x => ConvertFloat(x)).ToArray();
+
+            //Get context.
+            DspAdpcmContext context = null;
+            if (encodingData != null) {
+                context = encodingData as DspAdpcmContext;
+            }
+            if (context == null) {
+                context = new DspAdpcmContext();
+                context.LoadCoeffs(GcAdpcmCoefficients.CalculateCoefficients(s));
+            }
+
+            //Encode data.
+            Data = DspAdpcmEncoder.EncodeSamples(s, context, loopStart);
+
+            //Set pointers.
+            encodingData = Context = context;
+
         }
 
         /// <summary>
-        /// Set the PCM16 samples.
+        /// Convert the data to floating point PCM.
         /// </summary>
-        public override void FromPCM16(short[] samples) {
-            this.samples = DspAdpcmEncoder.EncodeSamples(samples, out Context, LoopStart);
-            DataSize = this.samples.Length;
-            NumSamples = samples.Length;
+        /// <param name="decodingData">Decoding data.</param>
+        /// <returns>Floating point PCM data.</returns>
+        public float[] ToFloatPCM(object decodingData = null) {
+
+            //Get context.
+            DspAdpcmContext context = null;
+            if (decodingData != null) {
+                context = decodingData as DspAdpcmContext;
+            }
+            if (context == null) {
+                context = Context;
+            }
+
+            //Decode data.
+            short[] pcm = new short[SampleCount()];
+            DspAdpcmDecoder.Decode(Data, ref pcm, ref Context, (uint)pcm.Length);
+            var ret = pcm.Select(x => (float)x / short.MaxValue).ToArray();
+
+            //Set pointers.
+            decodingData = Context = context;
+
+            //Return data.
+            return ret;
+
         }
 
         /// <summary>
-        /// Read the encoding.
+        /// Trim audio data.
         /// </summary>
-        /// <param name="r">The reader.</param>
-        public override void Read(FileReader r) {
-            if (NumSamples == -1) {
-                samples = r.ReadBytes(DataSize);
-                NumSamples = DataSize;
-            } else {
-                samples = r.ReadBytes(NumSamples * 8 / 7);
-                DataSize = NumSamples * 8 / 7;
+        /// <param name="totalSamples">Total number of samples to have in the end.</param>
+        public void Trim(int totalSamples) {
+            Data = Data.SubArray(0, DspAdpcmMath.SampleCountToByteCount(totalSamples));
+        }
+
+        /// <summary>
+        /// Change block size.
+        /// </summary>
+        /// <param name="blocks">Audio blocks.</param>
+        /// <param name="newBlockSize">New block size.</param>
+        /// <returns>New blocks.</returns>
+        public List<IAudioEncoding> ChangeBlockSize(List<IAudioEncoding> blocks, int newBlockSize) {
+
+            //New blocks.
+            List<IAudioEncoding> newData = new List<IAudioEncoding>();
+
+            //Get all samples.
+            List<short> samples = new List<short>();
+            foreach (var b in blocks) {
+                samples.AddRange((short[])b.RawData());
+            }
+            short[] s = samples.ToArray();
+
+            //Block size is -1.
+            if (newBlockSize == -1) {
+                //newData.Add(new PCM16() { Data = s });
+            }
+
+            //Other.
+            else {
+                int samplesPerBlock = newBlockSize / 2;
+                int currSample = 0;
+                while (currSample < samples.Count) {
+                    int numToCopy = Math.Min(samples.Count - currSample, samplesPerBlock);
+                    //newData.Add(new PCM16() { Data = s.SubArray(currSample, numToCopy) });
+                    currSample += numToCopy;
+                }
+            }
+
+            //Return data.
+            return newData;
+
+        }
+
+        /// <summary>
+        /// Get a property.
+        /// </summary>
+        /// <typeparam name="T">Property type.</typeparam>
+        /// <param name="propertyName">Property name.</param>
+        /// <returns>Retrieved property.</returns>
+        public T GetProperty<T>(string propertyName) {
+            if (propertyName.ToLower().Equals("context")) {
+                return (T)(object)Context;
+            }
+            return default;
+        }
+
+        /// <summary>
+        /// Set a property.
+        /// </summary>
+        /// <typeparam name="T">Property type to set.</typeparam>
+        /// <param name="value">Value to set.</param>
+        /// <param name="propertyName">Name of the property to set.</param>
+        public void SetProperty<T>(T value, string propertyName) {
+            if (propertyName.ToLower().Equals("context")) {
+                Context = (DspAdpcmContext)(object)value;
             }
         }
 
         /// <summary>
-        /// Write the encoding.
+        /// Duplicate the audio data.
         /// </summary>
-        /// <param name="w">The writer.</param>
-        public override void Write(FileWriter w) {
-            w.Write(samples);
+        /// <returns>A copy of the audio data.</returns>
+        public IAudioEncoding Duplicate() {
+            DspAdpcm ret = new DspAdpcm() { Data = new byte[Data.Length] };
+            Array.Copy(Data, ret.Data, Data.Length);
+            ret.Context = new DspAdpcmContext() { coefs = Context.coefs, gain = Context.gain, loop_pred_scale = Context.loop_pred_scale, loop_yn1 = Context.loop_yn1, loop_yn2 = Context.loop_yn2, pred_scale = Context.pred_scale, yn1 = Context.yn1, yn2 = Context.yn2 };
+            return ret;
         }
 
         /// <summary>
-        /// Init samples from a number of blocks.
+        /// Convert a float to a short sample.
         /// </summary>
-        /// <param name="blockCount">The number of blocks.</param>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <param name="lastBlockSize">The size of the last block.</param>
-        /// <param name="lastBlockSamples">Samples in the last block.</param>
-        public override void InitFromBlocks(uint blockCount, uint blockSize, uint blockSamples, uint lastBlockSize, uint lastBlockSamples) {
-            samples = new byte[(blockCount - 1) * blockSize + lastBlockSize];
-            NumSamples = (int)((blockCount - 1) * blockSamples + blockSize);
-            DataSize = samples.Length;
-        }
+        /// <param name="sample">Sample to convert.</param>
+        /// <returns>Converted sample.</returns>
+        private short ConvertFloat(float sample) => (short)(sample * short.MaxValue);
 
         /// <summary>
-        /// Get the number of blocks.
+        /// Get the context.
         /// </summary>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <returns>The number of blocks.</returns>
-        public override uint NumBlocks(uint blockSize, uint blockSamples) {
-            uint num = (uint)samples.Length / blockSize;
-            if (samples.Length % blockSize != 0) { num++; }
-            return num;
-        }
+        /// <param name="blocks">Blocks to get the context from.</param>
+        /// <param name="loopStart">Loop start.</param>
+        /// <returns></returns>
+        public static DspAdpcmContext GetContext(List<IAudioEncoding> blocks, int loopStart = -1) {
 
-        /// <summary>
-        /// Get the size of the last block.
-        /// </summary>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <returns>The size of the last block.</returns>
-        public override uint LastBlockSize(uint blockSize, uint blockSamples) {
-            uint size = (uint)samples.Length % blockSize;
-            if (size == 0) { size = blockSize; }
-            return size;
-        }
+            //New context.
+            DspAdpcmContext ret = new DspAdpcmContext();
 
-        /// <summary>
-        /// Get the samples in the last block.
-        /// </summary>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <returns>The amount of samples in the last block.</returns>
-        public override uint LastBlockSamples(uint blockSize, uint blockSamples) {
-            uint samples = (uint)NumSamples % blockSamples;
-            if (samples == 0) { samples = blockSamples; }
-            return samples;
-        }
+            //Test.
+            if (blocks.Count == 0) { return ret; }
 
-        /// <summary>
-        /// Read a block.
-        /// </summary>
-        /// <param name="r">The reader.</param>
-        /// <param name="blockNum"></param>
-        /// <param name="blockSize"></param>
-        /// <param name="blockSamples"></param>
-        public override void ReadBlock(FileReader r, int blockNum, uint blockSize, uint blockSamples) {
-            byte[] data = r.ReadBytes(blockNum == NumBlocks(blockSize, blockSamples) - 1 ? (int)LastBlockSize(blockSize, blockSamples) : (int)blockSize);
-            data.CopyTo(samples, blockNum * blockSize);
-        }
+            //Get data.
+            ret.coefs = (blocks[0] as DspAdpcm).Context.coefs;
+            ret.yn1 = (blocks[0] as DspAdpcm).Context.yn1;
+            ret.yn2 = (blocks[0] as DspAdpcm).Context.yn2;
+            ret.pred_scale = (blocks[0] as DspAdpcm).Context.pred_scale;
+            ret.gain = (blocks[0] as DspAdpcm).Context.gain;
 
-        /// <summary>
-        /// Write a block.
-        /// </summary>
-        /// <param name="w">The writer.</param>
-        /// <param name="blockNum">The number of blocks.</param>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        public override void WriteBlock(FileWriter w, int blockNum, uint blockSize, uint blockSamples) {
-            int size = blockNum == NumBlocks(blockSize, blockSamples) - 1 ? (int)LastBlockSize(blockSize, blockSamples) : (int)blockSize;
-            w.Write(samples.SubArray(blockNum * NumSamples, size));
+            //See if data is stored in its proper block.
+            if (loopStart != -1) {
+                int samplesPerBlock = blocks[0].SampleCount();
+                int blockNum = loopStart / samplesPerBlock;
+                ret.loop_yn1 = (blocks[blockNum] as DspAdpcm).Context.loop_yn1;
+                ret.loop_yn2 = (blocks[blockNum] as DspAdpcm).Context.loop_yn2;
+                ret.loop_pred_scale = (blocks[blockNum] as DspAdpcm).Context.loop_pred_scale;
+            }
+
+            //Default.
+            if (ret.loop_yn1 == 0 && ret.loop_yn2 == 0) {
+                ret.loop_yn1 = (blocks[0] as DspAdpcm).Context.loop_yn1;
+                ret.loop_yn2 = (blocks[0] as DspAdpcm).Context.loop_yn2;
+                ret.loop_pred_scale = (blocks[0] as DspAdpcm).Context.loop_pred_scale;
+            }
+
+            //Return the context.
+            return ret;
+
         }
 
     }
 
+    /// <summary>
+    /// DSP-ADPCM math.
+    /// </summary>
+    public static class DspAdpcmMath {
+        public static readonly int BytesPerFrame = 8;
+        public static readonly int SamplesPerFrame = 14;
+        public static readonly int NibblesPerFrame = 16;
+
+        public static int NibbleCountToSampleCount(int nibbleCount) {
+            int frames = nibbleCount / NibblesPerFrame;
+            int extraNibbles = nibbleCount % NibblesPerFrame;
+            int extraSamples = extraNibbles < 2 ? 0 : extraNibbles - 2;
+
+            return SamplesPerFrame * frames + extraSamples;
+        }
+
+        public static int SampleCountToNibbleCount(int sampleCount) {
+            int frames = sampleCount / SamplesPerFrame;
+            int extraSamples = sampleCount % SamplesPerFrame;
+            int extraNibbles = extraSamples == 0 ? 0 : extraSamples + 2;
+
+            return NibblesPerFrame * frames + extraNibbles;
+        }
+
+        public static int NibbleToSample(int nibble) {
+            int frames = nibble / NibblesPerFrame;
+            int extraNibbles = nibble % NibblesPerFrame;
+            int samples = SamplesPerFrame * frames;
+
+            return samples + extraNibbles - 2;
+        }
+
+        public static int SampleToNibble(int sample) {
+            int frames = sample / SamplesPerFrame;
+            int extraSamples = sample % SamplesPerFrame;
+
+            return NibblesPerFrame * frames + extraSamples + 2;
+        }
+
+        public static int SampleCountToByteCount(int sampleCount) => SampleCountToNibbleCount(sampleCount).DivideBy2RoundUp();
+        public static int ByteCountToSampleCount(int byteCount) => NibbleCountToSampleCount(byteCount * 2);
+
+    }
+
+    /// <summary>
+    /// DSP-ADPCM Decoder.
+    /// </summary>
     public static class DspAdpcmDecoder {
 
         static sbyte[] NibbleToSbyte = { 0, 1, 2, 3, 4, 5, 6, 7, -8, -7, -6, -5, -4, -3, -2, -1 };
@@ -214,7 +344,7 @@ namespace GotaSoundIO.Sound {
         /// <param name="samples">Number of samples.</param>
         public static void Decode(byte[] src, ref Int16[] dst, ref DspAdpcmContext cxt, UInt32 samples) {
 
-            //Each DSP-APCM frame is 8 bytes long. It contains 1 header byte, and 7 sample bytes.
+            //Each DSP-ADPCM frame is 8 bytes long. It contains 1 header byte, and 7 sample bytes.
 
             //Set initial values.
             short hist1 = cxt.yn1;
@@ -244,7 +374,6 @@ namespace GotaSoundIO.Sound {
                     for (UInt32 s = 0; s < 2; s++) {
                         sbyte adpcm_nibble = ((s == 0) ? GetHighNibble(byt) : GetLowNibble(byt));
                         short sample = Clamp16(((adpcm_nibble * scale) << 11) + 1024 + ((coef1 * hist1) + (coef2 * hist2)) >> 11);
-
                         hist2 = hist1;
                         hist1 = sample;
                         dst[dstIndex++] = sample;
@@ -256,6 +385,10 @@ namespace GotaSoundIO.Sound {
                 }
 
             }
+
+            //Set context.
+            cxt.yn1 = hist1;
+            cxt.yn2 = hist2;
 
         }
 
@@ -271,19 +404,16 @@ namespace GotaSoundIO.Sound {
         /// </summary>
         /// <returns>The samples.</returns>
         /// <param name="samples">Samples.</param>
-		public static byte[] EncodeSamples(short[] samples, out DspAdpcmContext info, uint loopStart) {
+		public static byte[] EncodeSamples(short[] samples, DspAdpcmContext info, int loopStart) {
 
             //Encode data.
-            short[] coeffs = GcAdpcmCoefficients.CalculateCoefficients(samples);
-            byte[] dspAdpcm = GcAdpcmEncoder.Encode(samples, coeffs);
-
-            info = new DspAdpcmContext();
-            info.LoadCoeffs(coeffs);
+            byte[] dspAdpcm = GcAdpcmEncoder.Encode(samples, info.GetCoeffs(), new GcAdpcmParameters() { History1 = info.yn1, History2 = info.yn2, SampleCount = samples.Length });
 
             //Loop stuff.
             if (loopStart > 0) info.loop_yn1 = samples[loopStart - 1];
             if (loopStart > 1) info.loop_yn2 = samples[loopStart - 2];
 
+            //Return data.
             return dspAdpcm;
 
         }
@@ -293,7 +423,7 @@ namespace GotaSoundIO.Sound {
     /// <summary>
     /// DspAdpcm context
     /// </summary>
-    public class DspAdpcmContext : IReadable, IWritable {
+    public class DspAdpcmContext : IReadable, IWriteable {
 
         /// <summary>
         /// Get the coeffecients.

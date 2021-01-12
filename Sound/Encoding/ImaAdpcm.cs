@@ -1,8 +1,9 @@
 ﻿using GotaSoundIO.IO;
+using GotaSoundIO.Sound.Encoding;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -11,246 +12,166 @@ namespace GotaSoundIO.Sound {
     /// <summary>
     /// Interactive Multimedia Association ADPCM.
     /// </summary>
-    public class ImaAdpcm : AudioEncoding {
+    public class ImaAdpcm : IAudioEncoding {
 
         /// <summary>
-        /// Sample data.
+        /// Data.
         /// </summary>
-        private byte[] samples;
+        private byte[] Data;
 
         /// <summary>
-        /// Get the PCM16 samples.
+        /// Last sample.
         /// </summary>
-        /// <returns>The PCM16 samples.</returns>
-        public override short[] ToPCM16() {
-            List<short> s = new List<short>();
-            ImaAdpcmDecoder d = new ImaAdpcmDecoder(samples, 0);
-            for (int i = 0; i < NumSamples; i++) {
-                try {
-                    s.Add(d.GetSample());
-                } catch { }
-            }
-            return s.ToArray();
-        }
+        private int Sample;
 
         /// <summary>
-        /// Set the PCM16 samples.
+        /// Last index.
         /// </summary>
-        public override void FromPCM16(short[] samples) {
-            NumSamples = samples.Length;
-            ImaAdpcmEncoder e = new ImaAdpcmEncoder();
-            this.samples = e.Encode(samples);
-        }
-
-        /// <summary>
-        /// Read the encoding.
-        /// </summary>
-        /// <param name="r">The reader.</param>
-        public override void Read(FileReader r) {
-            samples = r.ReadBytes(DataSize);
-        }
-            
-        /// <summary>
-        /// Write the encoding.
-        /// </summary>
-        /// <param name="w">The writer.</param>
-        public override void Write(FileWriter w) {
-            w.Write(samples);
-        }
-
-        /// <summary>
-        /// Init samples from a number of blocks.
-        /// </summary>
-        /// <param name="blockCount">The number of blocks.</param>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <param name="lastBlockSize">The size of the last block.</param>
-        /// <param name="lastBlockSamples">Samples in the last block.</param>
-        public override void InitFromBlocks(uint blockCount, uint blockSize, uint blockSamples, uint lastBlockSize, uint lastBlockSamples) {
-            samples = new byte[(blockCount - 1) * blockSize + lastBlockSize];
-            NumSamples = (int)((blockCount - 1) * blockSamples + lastBlockSamples);
-            DataSize = samples.Length;
-        }
-
-        /// <summary>
-        /// Get the number of blocks.
-        /// </summary>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <returns>The number of blocks.</returns>
-        public override uint NumBlocks(uint blockSize, uint blockSamples) {
-            uint num = (uint)samples.Length / blockSize;
-            if (samples.Length % blockSize != 0) { num++; }
-            return num;
-        }
-
-        /// <summary>
-        /// Get the size of the last block.
-        /// </summary>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <returns>The size of the last block.</returns>
-        public override uint LastBlockSize(uint blockSize, uint blockSamples) {
-            uint num = (uint)samples.Length % blockSize;
-            if (num == 0) { num = blockSize; }
-            return num;
-        }
-
-        /// <summary>
-        /// Get the samples in the last block.
-        /// </summary>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <returns>The amount of samples in the last block.</returns>
-        public override uint LastBlockSamples(uint blockSize, uint blockSamples) {
-            uint num = (uint)NumSamples % blockSamples;
-            if (num == 0) { num = blockSamples; }
-            return num;
-        }
-
-        /// <summary>
-        /// Read a block.
-        /// </summary>
-        /// <param name="r">The reader.</param>
-        /// <param name="blockNum"></param>
-        /// <param name="blockSize"></param>
-        /// <param name="blockSamples"></param>
-        public override void ReadBlock(FileReader r, int blockNum, uint blockSize, uint blockSamples) {
-            byte[] arr = r.ReadBytes(blockNum == NumBlocks(blockSize, blockSamples) - 1 ? (int)LastBlockSize(blockSize, blockSamples) : (int)blockSize);
-            arr.CopyTo(samples, blockSize * blockNum);
-        }
-
-        /// <summary>
-        /// Write a block.
-        /// </summary>
-        /// <param name="w">The writer.</param>
-        /// <param name="blockNum">The number of blocks.</param>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        public override void WriteBlock(FileWriter w, int blockNum, uint blockSize, uint blockSamples) {
-            w.Write(samples.SubArray(blockNum * (int)blockSize, blockNum == NumBlocks(blockSize, blockSamples) - 1 ? (int)LastBlockSize(blockSize, blockSamples) : (int)blockSize));
-        }
-
-    }
-
-    /// <summary>
-    /// ImaAdpcm encoder.
-    /// </summary>
-    public class ImaAdpcmEncoder {
-        private bool IsInit;
-        private int Last;
         private int Index;
 
-        public byte[] Encode(short[] WaveData) {
-            List<byte> byteList = new List<byte>();
-            int num = 0;
-            if (!this.IsInit) {
-                this.Last = (int)WaveData[0];
-                this.Index = this.GetBestTableIndex(((int)WaveData[1] - (int)WaveData[0]) * 8);
-                MemoryStream o = new MemoryStream();
-                FileWriter bw = new FileWriter(o);
-                bw.ByteOrder = ByteOrder.LittleEndian;
-                bw.Write(WaveData[0]);
-                bw.Write((short)this.Index);
-                byte[] Data = o.ToArray();
-                byteList.AddRange((IEnumerable<byte>)Data);
-                ++num;
-                this.IsInit = true;
-            }
-            byte[] numArray = new byte[WaveData.Length - num];
-            for (int index = num; index < WaveData.Length; ++index) {
-                int bestConfig = this.GetBestConfig(this.Index, (int)WaveData[index] - this.Last);
-                numArray[index - num] = (byte)bestConfig;
-                this.Last = (int)ImaAdpcmMath.ClampSample(this.Last + (ImaAdpcmMath.StepTable[this.Index] / 8 + ImaAdpcmMath.StepTable[this.Index] / 4 * (bestConfig & 1) + ImaAdpcmMath.StepTable[this.Index] / 2 * (bestConfig >> 1 & 1) + ImaAdpcmMath.StepTable[this.Index] * (bestConfig >> 2 & 1)) * ((bestConfig >> 3 & 1) == 1 ? -1 : 1));
-                this.Index = ImaAdpcmMath.ClampIndex(this.Index + ImaAdpcmMath.IndexTable[bestConfig & 7]);
-            }
-            int index1 = 0;
-            while (index1 < numArray.Length) {
-                if (index1 == numArray.Length - 1)
-                    byteList.Add(numArray[index1]);
-                else
-                    byteList.Add((byte)((uint)numArray[index1] | (uint)numArray[index1 + 1] << 4));
-                index1 += 2;
-            }
-            return byteList.ToArray();
+        /// <summary>
+        /// Number of samples contained.
+        /// </summary>
+        /// <returns>Number of samples.</returns>
+        public int SampleCount() => Data.Length * 2;
+
+        /// <summary>
+        /// Data size contained.
+        /// </summary>
+        /// <returns>Data size.</returns>
+        public int DataSize() => Data.Length + 4;
+
+        /// <summary>
+        /// Get the number of samples from a block size.
+        /// </summary>
+        /// <param name="blockSize">Block size to get the number of samples from.</param>
+        /// <returns>Number of samples.</returns>
+        public int SamplesFromBlockSize(int blockSize) => (blockSize - 4) * 2;
+
+        /// <summary>
+        /// Raw data.
+        /// </summary>
+        /// <returns>Raw data.</returns>
+        public object RawData() => Data;
+
+        /// <summary>
+        /// Read the raw data.
+        /// </summary>
+        /// <param name="r">File reader.</param>
+        /// <param name="numSamples">Number of samples.</param>
+        /// <param name="dataSize">Data size.</param>
+        public void ReadRaw(FileReader r, uint numSamples, uint dataSize) {
+            Sample = r.ReadInt16();
+            Index = r.ReadInt16();
+            Data = r.ReadBytes((int)(dataSize - 4));
         }
 
-        private int GetBestTableIndex(int Diff) {
-            int num1 = int.MaxValue;
-            int num2 = -1;
-            for (int index = 0; index < ImaAdpcmMath.StepTable.Length; ++index) {
-                int num3 = Math.Abs(Math.Abs(Diff) - ImaAdpcmMath.StepTable[index]);
-                if (num3 < num1) {
-                    num1 = num3;
-                    num2 = index;
-                }
-            }
-            return num2;
+        /// <summary>
+        /// Write the raw data.
+        /// </summary>
+        /// <param name="w">File writer.</param>
+        public void WriteRaw(FileWriter w) {
+            w.Write((short)Sample);
+            w.Write((short)Index);
+            w.Write(Data);
         }
 
-        private int GetBestConfig(int Index, int Diff) {
-            int num1 = 0;
-            if (Diff < 0)
-                num1 |= 8;
-            Diff = Math.Abs(Diff);
-            int num2 = ImaAdpcmMath.StepTable[Index] / 8;
-            if (Math.Abs(num2 - Diff) >= ImaAdpcmMath.StepTable[Index]) {
-                num1 |= 4;
-                num2 += ImaAdpcmMath.StepTable[Index];
-            }
-            if (Math.Abs(num2 - Diff) >= ImaAdpcmMath.StepTable[Index] / 2) {
-                num1 |= 2;
-                num2 += ImaAdpcmMath.StepTable[Index] / 2;
-            }
-            if (Math.Abs(num2 - Diff) >= ImaAdpcmMath.StepTable[Index] / 4) {
-                num1 |= 1;
-                int num3 = num2 + ImaAdpcmMath.StepTable[Index] / 4;
-            }
-            return num1;
+        /// <summary>
+        /// Convert from floating point PCM to the data.
+        /// </summary>
+        /// <param name="pcm">PCM data.</param>
+        /// <param name="encodingData">Encoding data.</param>
+        /// <param name="loopStart">Loop start.</param>
+        /// <param name="loopEnd">Loop end.</param>
+        public void FromFloatPCM(float[] pcm, object encodingData = null, int loopStart = -1, int loopEnd = -1) {
+            ImaAdpcmEncoder e = new ImaAdpcmEncoder(pcm, out Sample, out Index);
+            Data = e.Encode();
         }
+
+        /// <summary>
+        /// Convert the data to floating point PCM.
+        /// </summary>
+        /// <param name="decodingData">Decoding data.</param>
+        /// <returns>Floating point PCM data.</returns>
+        public float[] ToFloatPCM(object decodingData = null) {
+            ImaAdpcmDecoder d = new ImaAdpcmDecoder(Sample, Index, Data, 0);
+            return d.Decode();
+        }
+
+        /// <summary>
+        /// Trim audio data.
+        /// </summary>
+        /// <param name="totalSamples">Total number of samples to have in the end.</param>
+        public void Trim(int totalSamples) {
+            Data = Data.SubArray(0, totalSamples / 2 + (totalSamples % 2 == 1 ? 1 : 0));
+        }
+
+        /// <summary>
+        /// Change block size.
+        /// </summary>
+        /// <param name="blocks">Audio blocks.</param>
+        /// <param name="newBlockSize">New block size.</param>
+        /// <returns>New blocks.</returns>
+        public List<IAudioEncoding> ChangeBlockSize(List<IAudioEncoding> blocks, int newBlockSize) {
+
+            //There is no better way.
+            AudioData a = new AudioData() { Channels = new List<List<IAudioEncoding>>() { blocks } };
+            a.Convert(typeof(ImaAdpcm), newBlockSize);
+            return a.Channels[0];
+
+        }
+
+        /// <summary>
+        /// Get a property.
+        /// </summary>
+        /// <typeparam name="T">Property type.</typeparam>
+        /// <param name="propertyName">Property name.</param>
+        /// <returns>Retrieved property.</returns>
+        public T GetProperty<T>(string propertyName) {
+            if (propertyName.ToLower().Equals("sample")) {
+                return (T)(object)Sample;
+            } else if (propertyName.ToLower().Equals("index")) {
+                return (T)(object)Index;
+            }
+            return default;
+        }
+
+        /// <summary>
+        /// Set a property.
+        /// </summary>
+        /// <typeparam name="T">Property type to set.</typeparam>
+        /// <param name="value">Value to set.</param>
+        /// <param name="propertyName">Name of the property to set.</param>
+        public void SetProperty<T>(T value, string propertyName) {
+            if (propertyName.ToLower().Equals("sample")) {
+                Sample = (int)(object)value;
+            } else if (propertyName.ToLower().Equals("index")) {
+                Index = (int)(object)value;
+            }
+        }
+
+        /// <summary>
+        /// Duplicate the audio data.
+        /// </summary>
+        /// <returns>A copy of the audio data.</returns>
+        public IAudioEncoding Duplicate() {
+            ImaAdpcm ret = new ImaAdpcm() { Data = new byte[Data.Length] };
+            Array.Copy(Data, ret.Data, Data.Length);
+            ret.Sample = Sample;
+            ret.Index = Index;
+            return ret;
+        }
+
     }
 
     /// <summary>
-    /// ImaAdpcm decoder.
-    /// </summary>
-    public class ImaAdpcmDecoder {
-        private byte[] _data;
-
-        public int Last { get; set; }
-
-        public int Index { get; set; }
-
-        public int Offset { get; set; }
-
-        public bool SecondNibble { get; set; }
-
-        public ImaAdpcmDecoder(byte[] Data, int Offset) {
-            this.Last = (int)(short)((int)Data[Offset] | (int)Data[Offset + 1] << 8);
-            this.Index = (int)(short)((int)Data[Offset + 2] | (int)Data[Offset + 3] << 8) & (int)sbyte.MaxValue;
-            Offset += 4;
-            this.Offset = Offset;
-            this._data = Data;
-        }
-
-        public short GetSample() {
-            short sample = this.GetSample((byte)((int)this._data[this.Offset] >> (this.SecondNibble ? 4 : 0) & 15));
-            if (this.SecondNibble)
-                ++this.Offset;
-            this.SecondNibble = !this.SecondNibble;
-            return sample;
-        }
-
-        private short GetSample(byte nibble) {
-            this.Last = (int)ImaAdpcmMath.ClampSample(this.Last + (ImaAdpcmMath.StepTable[this.Index] / 8 + ImaAdpcmMath.StepTable[this.Index] / 4 * ((int)nibble & 1) + ImaAdpcmMath.StepTable[this.Index] / 2 * ((int)nibble >> 1 & 1) + ImaAdpcmMath.StepTable[this.Index] * ((int)nibble >> 2 & 1)) * (((int)nibble >> 3 & 1) == 1 ? -1 : 1));
-            this.Index = ImaAdpcmMath.ClampIndex(this.Index + ImaAdpcmMath.IndexTable[(int)nibble & 7]);
-            return (short)this.Last;
-        }
-    }
-
-    /// <summary>
-    /// ImaAdpcm math.
+    /// IMA-ADPCM Math.
     /// </summary>
     public class ImaAdpcmMath {
+
+        /// <summary>
+        /// Index table.
+        /// </summary>
         public static readonly int[] IndexTable = new int[16]
         {
       -1,
@@ -270,6 +191,10 @@ namespace GotaSoundIO.Sound {
       6,
       8
         };
+
+        /// <summary>
+        /// Step table.
+        /// </summary>
         public static readonly int[] StepTable = new int[89]
         {
       7,
@@ -360,9 +285,14 @@ namespace GotaSoundIO.Sound {
       24623,
       27086,
       29794,
-      (int) short.MaxValue
+      short.MaxValue
         };
 
+        /// <summary>
+        /// Clamp a sample value.
+        /// </summary>
+        /// <param name="value">Value to clamp.</param>
+        /// <returns>Clamped sample value.</returns>
         public static short ClampSample(int value) {
             if (value < -32767)
                 value = -32767;
@@ -371,6 +301,11 @@ namespace GotaSoundIO.Sound {
             return (short)value;
         }
 
+        /// <summary>
+        /// Clamp an index value.
+        /// </summary>
+        /// <param name="value">Value to clamp.</param>
+        /// <returns>Clamped value.</returns>
         public static int ClampIndex(int value) {
             if (value < 0)
                 value = 0;
@@ -378,6 +313,199 @@ namespace GotaSoundIO.Sound {
                 value = 88;
             return value;
         }
+
+    }
+
+    /// <summary>
+    /// IMA-ADPCM Decoder.
+    /// </summary>
+    public class ImaAdpcmDecoder {
+
+        /// <summary>
+        /// Last sample.
+        /// </summary>
+        public int Sample;
+
+        /// <summary>
+        /// Last index.
+        /// </summary>
+        public int Index;
+
+        /// <summary>
+        /// Offset into the data.
+        /// </summary>
+        public int Offset;
+
+        /// <summary>
+        /// If to decode the 2nd nibble.
+        /// </summary>
+        public bool SecondNibble;
+        
+        /// <summary>
+        /// Data to read.
+        /// </summary>
+        private byte[] Data;
+
+        /// <summary>
+        /// Create an IMA-ADPCM decoder.
+        /// </summary>
+        /// <param name="sample">Last sample.</param>
+        /// <param name="index">Last index.</param>
+        /// <param name="data">Data to decode.</param>
+        /// <param name="offset">Starting offset.</param>
+        /// <param name="secondNibble">If to get the 2nd nibble value.</param>
+        public ImaAdpcmDecoder(int sample, int index, byte[] data, int offset = 0, bool secondNibble = false) {
+            Sample = sample;
+            Index = index;
+            Data = data;
+            Offset = offset;
+            SecondNibble = secondNibble;
+        }
+
+        /// <summary>
+        /// Convert data to float array.
+        /// </summary>
+        /// <returns>Data as a float.</returns>
+        public float[] Decode() {
+            List<float> ret = new List<float>();
+            while (Offset < Data.Length) {
+                ret.Add((float)GetSample() / short.MaxValue);
+            }
+            return ret.ToArray();
+        }
+
+        /// <summary>
+        /// Get a sample.
+        /// </summary>
+        /// <returns>The sample.</returns>
+        private short GetSample() {
+            short sample = this.GetSample((byte)((int)Data[Offset] >> (SecondNibble ? 4 : 0) & 15));
+            if (this.SecondNibble)
+                ++this.Offset;
+            SecondNibble = !SecondNibble;
+            return sample;
+        }
+
+        /// <summary>
+        /// Get a sample from a nibble.
+        /// </summary>
+        /// <param name="nibble">Nibble to decode.</param>
+        /// <returns>Decoded sample.</returns>
+        private short GetSample(byte nibble) {
+            Sample = ImaAdpcmMath.ClampSample(Sample + (ImaAdpcmMath.StepTable[Index] / 8 + ImaAdpcmMath.StepTable[Index] / 4 * ((int)nibble & 1) + ImaAdpcmMath.StepTable[Index] / 2 * ((int)nibble >> 1 & 1) + ImaAdpcmMath.StepTable[Index] * ((int)nibble >> 2 & 1)) * (((int)nibble >> 3 & 1) == 1 ? -1 : 1));
+            Index = ImaAdpcmMath.ClampIndex(Index + ImaAdpcmMath.IndexTable[(int)nibble & 7]);
+            return (short)Sample;
+        }
+
+    }
+
+    /// <summary>
+    /// IMA-ADPCM Encoder.
+    /// </summary>
+    public class ImaAdpcmEncoder {
+
+        /// <summary>
+        /// Last sample.
+        /// </summary>
+        private int Sample;
+
+        /// <summary>
+        /// Index.
+        /// </summary>
+        private int Index;
+
+        /// <summary>
+        /// Data to encode.
+        /// </summary>
+        private float[] Data;
+
+        /// <summary>
+        /// Initialize the encoder.
+        /// </summary>
+        /// <param name="data">Data to encode.</param>
+        /// <param name="sample">Last sample.</param>
+        /// <param name="index">Last index.</param>
+        public ImaAdpcmEncoder(float[] data, out int sample, out int index) {
+            Sample = sample = ConvertFloat(data[0]);
+            Index = index = GetBestTableIndex((ConvertFloat(data[1]) - ConvertFloat(data[0])) * 8);
+            Data = data;
+        }
+
+        /// <summary>
+        /// Encode audio data.
+        /// </summary>
+        /// <returns>Encoded audio data.</returns>
+        public byte[] Encode() {
+            byte[] data = new byte[Data.Length / 2 + (Data.Length % 2 != 0 ? 1 : 0)];
+            bool secondNibble = false;
+            int dataPtr = 0;
+            for (int i = 0; i < Data.Length; i++) {
+                int config = GetBestConfig(Index, ConvertFloat(Data[i]) - Sample);
+                Sample = ImaAdpcmMath.ClampSample(Sample + (ImaAdpcmMath.StepTable[Index] / 8 + ImaAdpcmMath.StepTable[Index] / 4 * (config & 1) + ImaAdpcmMath.StepTable[Index] / 2 * (config >> 1 & 1) + ImaAdpcmMath.StepTable[Index] * (config >> 2 & 1)) * ((config >> 3 & 1) == 1 ? -1 : 1));
+                Index = ImaAdpcmMath.ClampIndex(this.Index + ImaAdpcmMath.IndexTable[config & 7]);
+                if (!secondNibble) {
+                    data[dataPtr] |= (byte)((config & 0xF) << 0);
+                } else {
+                    data[dataPtr] |= (byte)((config & 0xF) << 4);
+                    dataPtr++;
+                }
+                secondNibble = !secondNibble;
+            }
+            return data;
+        }
+
+        /// <summary>
+        /// Convert a float to a short sample.
+        /// </summary>
+        /// <param name="sample">Sample to convert.</param>
+        /// <returns>Converted sample.</returns>
+        private short ConvertFloat(float sample) => (short)(sample * short.MaxValue);
+
+        /// <summary>
+        /// Get the best tabl index.
+        /// </summary>
+        /// <param name="diff">Difference from last sample.</param>
+        /// <returns></returns>
+        private int GetBestTableIndex(int diff) {
+            int num1 = int.MaxValue;
+            int num2 = -1;
+            for (int index = 0; index < ImaAdpcmMath.StepTable.Length; ++index) {
+                int num3 = Math.Abs(Math.Abs(diff) - ImaAdpcmMath.StepTable[index]);
+                if (num3 < num1) {
+                    num1 = num3;
+                    num2 = index;
+                }
+            }
+            return num2;
+        }
+
+        /// <summary>
+        /// Get best configuration.
+        /// </summary>
+        /// <param name="index">Step table index.</param>
+        /// <param name="diff">Difference from last sample.</param>
+        /// <returns>Best configuration.</returns>
+        private int GetBestConfig(int index, int diff) {
+            int num1 = 0;
+            if (diff < 0)
+                num1 |= 8;
+            diff = Math.Abs(diff);
+            int num2 = ImaAdpcmMath.StepTable[index] / 8;
+            if (Math.Abs(num2 - diff) >= ImaAdpcmMath.StepTable[index]) {
+                num1 |= 4;
+                num2 += ImaAdpcmMath.StepTable[index];
+            }
+            if (Math.Abs(num2 - diff) >= ImaAdpcmMath.StepTable[index] / 2) {
+                num1 |= 2;
+                num2 += ImaAdpcmMath.StepTable[index] / 2;
+            }
+            if (Math.Abs(num2 - diff) >= ImaAdpcmMath.StepTable[index] / 4) {
+                num1 |= 1;
+                int num3 = num2 + ImaAdpcmMath.StepTable[index] / 4;
+            }
+            return num1;
+        }
+
     }
 
 }

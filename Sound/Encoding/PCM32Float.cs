@@ -3,21 +3,20 @@ using GotaSoundIO.Sound.Encoding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace GotaSoundIO.Sound {
 
     /// <summary>
-    /// Unsigned 8-bit PCM audio.
+    /// Floating point 32-bit PCM audio.
     /// </summary>
-    public class PCM8 : IAudioEncoding {
+    public class PCM32Float : IAudioEncoding {
 
         /// <summary>
         /// Data.
         /// </summary>
-        private byte[] Data;
+        private float[] Data;
 
         /// <summary>
         /// Number of samples contained.
@@ -29,14 +28,14 @@ namespace GotaSoundIO.Sound {
         /// Data size contained.
         /// </summary>
         /// <returns>Data size.</returns>
-        public int DataSize() => SampleCount();
+        public int DataSize() => SampleCount() * 4;
 
         /// <summary>
         /// Get the number of samples from a block size.
         /// </summary>
         /// <param name="blockSize">Block size to get the number of samples from.</param>
         /// <returns>Number of samples.</returns>
-        public int SamplesFromBlockSize(int blockSize) => blockSize;
+        public int SamplesFromBlockSize(int blockSize) => blockSize / 4;
 
         /// <summary>
         /// Raw data.
@@ -51,7 +50,7 @@ namespace GotaSoundIO.Sound {
         /// <param name="numSamples">Number of samples.</param>
         /// <param name="dataSize">Data size.</param>
         public void ReadRaw(FileReader r, uint numSamples, uint dataSize) {
-            Data = r.ReadBytes((int)dataSize);
+            Data = r.ReadSingles((int)(dataSize / 4));
         }
 
         /// <summary>
@@ -70,7 +69,8 @@ namespace GotaSoundIO.Sound {
         /// <param name="loopStart">Loop start.</param>
         /// <param name="loopEnd">Loop end.</param>
         public void FromFloatPCM(float[] pcm, object encodingData = null, int loopStart = -1, int loopEnd = -1) {
-            Data = pcm.Select(x => (byte)(x * sbyte.MaxValue + 128)).ToArray();
+            Data = new float[pcm.Length];
+            Array.Copy(pcm, Data, pcm.Length);
         }
 
         /// <summary>
@@ -78,7 +78,7 @@ namespace GotaSoundIO.Sound {
         /// </summary>
         /// <param name="decodingData">Decoding data.</param>
         /// <returns>Floating point PCM data.</returns>
-        public float[] ToFloatPCM(object decodingData = null) => Data.Select(x => (float)(x - 128) / sbyte.MaxValue).ToArray();
+        public float[] ToFloatPCM(object decodingData = null) => Data;
 
         /// <summary>
         /// Trim audio data.
@@ -100,24 +100,24 @@ namespace GotaSoundIO.Sound {
             List<IAudioEncoding> newData = new List<IAudioEncoding>();
 
             //Get all samples.
-            List<byte> samples = new List<byte>();
+            List<float> samples = new List<float>();
             foreach (var b in blocks) {
-                samples.AddRange((byte[])b.RawData());
+                samples.AddRange(b.ToFloatPCM());
             }
-            byte[] s = samples.ToArray();
+            float[] s = samples.ToArray();
 
             //Block size is -1.
             if (newBlockSize == -1) {
-                newData.Add(new PCM8() { Data = s });
+                newData.Add(new PCM32Float() { Data = s });
             }
 
             //Other.
             else {
-                int samplesPerBlock = newBlockSize;
+                int samplesPerBlock = newBlockSize / 4;
                 int currSample = 0;
                 while (currSample < samples.Count) {
                     int numToCopy = Math.Min(samples.Count - currSample, samplesPerBlock);
-                    newData.Add(new PCM8() { Data = s.SubArray(currSample, numToCopy) });
+                    newData.Add(new PCM32Float() { Data = s.SubArray(currSample, numToCopy) });
                     currSample += numToCopy;
                 }
             }
@@ -148,7 +148,7 @@ namespace GotaSoundIO.Sound {
         /// </summary>
         /// <returns>A copy of the audio data.</returns>
         public IAudioEncoding Duplicate() {
-            PCM8 ret = new PCM8() { Data = new byte[Data.Length] };
+            PCM32Float ret = new PCM32Float() { Data = new float[Data.Length] };
             Array.Copy(Data, ret.Data, Data.Length);
             return ret;
         }

@@ -392,7 +392,7 @@ namespace GotaSoundIO.IO {
         /// Write an item.
         /// </summary>
         ///<param name="w">Item to write.</param>
-        public void Write(IWritable w) {
+        public void Write(IWriteable w) {
 
             //Write.
             w.Write(this);
@@ -488,10 +488,10 @@ namespace GotaSoundIO.IO {
             if (writeBlockSize) {
                 Position = BlockOffsets[BlockOffsets.Count - 1] + 4;
                 Write((uint)BlockSizes[BlockSizes.Count - 1]);
+                EndStructure();
             }
 
-            //Reset position.
-            EndStructure();
+            //Reset position.  
             Position = bak;
 
         }
@@ -530,10 +530,10 @@ namespace GotaSoundIO.IO {
             long bak = Position;
             Position = Offsets[name];
             Offsets.Remove(name);
-            if (absolute) {
-                Write((uint)(bak - FileOffset));
-            } else if (offsetOverride != -2) {
+            if (offsetOverride != -2) {
                 Write((uint)offsetOverride);
+            } else if (absolute) {
+                Write((uint)(bak - FileOffset));
             } else {
                 Write((uint)(bak - CurrentOffset));
             }

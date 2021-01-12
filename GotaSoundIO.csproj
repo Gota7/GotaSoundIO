@@ -49,9 +49,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ChannelExtension.cs" />
-    <Compile Include="Editable.cs" />
-    <Compile Include="EditableCategory.cs" />
+    <Compile Include="FlagParameters.cs" />
     <Compile Include="IO\BooleanDataFormat.cs" />
     <Compile Include="IO\ByteConverter.cs" />
     <Compile Include="IO\ByteConverterBigEndian.cs" />
@@ -64,7 +62,7 @@
     <Compile Include="IO\FileReader.cs" />
     <Compile Include="IO\FileWriter.cs" />
     <Compile Include="IO\IReadable.cs" />
-    <Compile Include="IO\IWritable.cs" />
+    <Compile Include="IO\IWriteable.cs" />
     <Compile Include="IO\RIFF\ListChunk.cs" />
     <Compile Include="IO\Reference.cs" />
     <Compile Include="IO\IOFile.cs" />
@@ -76,23 +74,29 @@
     <Compile Include="ListUtil.cs" />
     <Compile Include="NullTerminatedString.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Sound\Encoding\AudioEncoding.cs" />
-    <Compile Include="Sound\Encoding\BlockedImaAdpcm.cs" />
     <Compile Include="Sound\Encoding\DspAdpcm.cs" />
     <Compile Include="Sound\Encoding\ImaAdpcm.cs" />
-    <Compile Include="Sound\Encoding\PCM16.cs" />
+    <Compile Include="Sound\Encoding\PCM24.cs" />
+    <Compile Include="Sound\Formats\DSP.cs" />
+    <Compile Include="Sound\AudioData.cs" />
+    <Compile Include="Sound\IAudioEncoding.cs" />
+    <Compile Include="Sound\Encoding\PCM8Signed.cs" />
     <Compile Include="Sound\Encoding\PCM8.cs" />
-    <Compile Include="Sound\Encoding\SignedPCM8.cs" />
+    <Compile Include="Sound\Encoding\PCM16.cs" />
+    <Compile Include="Sound\Encoding\PCM32Signed.cs" />
+    <Compile Include="Sound\Encoding\PCM32Float.cs" />
     <Compile Include="Sound\Playback\LoopStream.cs" />
     <Compile Include="Sound\Playback\NullWavePlayer.cs" />
     <Compile Include="Sound\Playback\StreamPlayer.cs" />
-    <Compile Include="Sound\RiffWave.cs" />
+    <Compile Include="Sound\Formats\RiffWave.cs" />
     <Compile Include="Sound\SoundFile.cs" />
     <Compile Include="Table.cs" />
-    <Compile Include="Viewable.cs" />
+    <Compile Include="Int24.cs" />
+    <Compile Include="UInt24.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

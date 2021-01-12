@@ -12,7 +12,7 @@ namespace GotaSoundIO {
     /// A table.
     /// </summary>
     /// <typeparam name="T">Type represented in the table.</typeparam>
-    public class Table<T> : IList<T>, IReadable, IWritable {
+    public class Table<T> : IList<T>, IReadable, IWriteable {
 
         /// <summary>
         /// Items.
@@ -24,6 +24,12 @@ namespace GotaSoundIO {
         /// </summary>
         /// <param name="t">Table.</param>
         public static implicit operator List<T>(Table<T> t) => t.items;
+
+        /// <summary>
+        /// Make a table from a list of items.
+        /// </summary>
+        /// <param name="l">List.</param>
+        public static explicit operator Table<T>(List<T> l) { return new Table<T>() { items = l }; }
 
         /// <summary>
         /// Read the table.
@@ -109,7 +115,7 @@ namespace GotaSoundIO {
             //Custom.
             else {
                 foreach (var i in items) {
-                    w.Write(i as IWritable);
+                    w.Write(i as IWriteable);
                 }
             }
 

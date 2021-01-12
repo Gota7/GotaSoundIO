@@ -10,14 +10,14 @@ using System.Threading.Tasks;
 namespace GotaSoundIO.Sound {
 
     /// <summary>
-    /// Unsigned 8-bit PCM audio.
+    /// Signed 32-bit PCM audio.
     /// </summary>
-    public class PCM8 : IAudioEncoding {
+    public class PCM32Signed : IAudioEncoding {
 
         /// <summary>
         /// Data.
         /// </summary>
-        private byte[] Data;
+        private int[] Data;
 
         /// <summary>
         /// Number of samples contained.
@@ -29,14 +29,14 @@ namespace GotaSoundIO.Sound {
         /// Data size contained.
         /// </summary>
         /// <returns>Data size.</returns>
-        public int DataSize() => SampleCount();
+        public int DataSize() => SampleCount() * 4;
 
         /// <summary>
         /// Get the number of samples from a block size.
         /// </summary>
         /// <param name="blockSize">Block size to get the number of samples from.</param>
         /// <returns>Number of samples.</returns>
-        public int SamplesFromBlockSize(int blockSize) => blockSize;
+        public int SamplesFromBlockSize(int blockSize) => blockSize / 4;
 
         /// <summary>
         /// Raw data.
@@ -51,7 +51,7 @@ namespace GotaSoundIO.Sound {
         /// <param name="numSamples">Number of samples.</param>
         /// <param name="dataSize">Data size.</param>
         public void ReadRaw(FileReader r, uint numSamples, uint dataSize) {
-            Data = r.ReadBytes((int)dataSize);
+            Data = r.ReadInt32s((int)(dataSize / 4));
         }
 
         /// <summary>
@@ -70,7 +70,7 @@ namespace GotaSoundIO.Sound {
         /// <param name="loopStart">Loop start.</param>
         /// <param name="loopEnd">Loop end.</param>
         public void FromFloatPCM(float[] pcm, object encodingData = null, int loopStart = -1, int loopEnd = -1) {
-            Data = pcm.Select(x => (byte)(x * sbyte.MaxValue + 128)).ToArray();
+            Data = pcm.Select(x => (int)(x * int.MaxValue)).ToArray();
         }
 
         /// <summary>
@@ -78,7 +78,7 @@ namespace GotaSoundIO.Sound {
         /// </summary>
         /// <param name="decodingData">Decoding data.</param>
         /// <returns>Floating point PCM data.</returns>
-        public float[] ToFloatPCM(object decodingData = null) => Data.Select(x => (float)(x - 128) / sbyte.MaxValue).ToArray();
+        public float[] ToFloatPCM(object decodingData = null) => Data.Select(x => (float)x / int.MaxValue).ToArray();
 
         /// <summary>
         /// Trim audio data.
@@ -100,24 +100,24 @@ namespace GotaSoundIO.Sound {
             List<IAudioEncoding> newData = new List<IAudioEncoding>();
 
             //Get all samples.
-            List<byte> samples = new List<byte>();
+            List<int> samples = new List<int>();
             foreach (var b in blocks) {
-                samples.AddRange((byte[])b.RawData());
+                samples.AddRange((int[])b.RawData());
             }
-            byte[] s = samples.ToArray();
+            int[] s = samples.ToArray();
 
             //Block size is -1.
             if (newBlockSize == -1) {
-                newData.Add(new PCM8() { Data = s });
+                newData.Add(new PCM32Signed() { Data = s });
             }
 
             //Other.
             else {
-                int samplesPerBlock = newBlockSize;
+                int samplesPerBlock = newBlockSize / 4;
                 int currSample = 0;
                 while (currSample < samples.Count) {
                     int numToCopy = Math.Min(samples.Count - currSample, samplesPerBlock);
-                    newData.Add(new PCM8() { Data = s.SubArray(currSample, numToCopy) });
+                    newData.Add(new PCM32Signed() { Data = s.SubArray(currSample, numToCopy) });
                     currSample += numToCopy;
                 }
             }
@@ -148,7 +148,7 @@ namespace GotaSoundIO.Sound {
         /// </summary>
         /// <returns>A copy of the audio data.</returns>
         public IAudioEncoding Duplicate() {
-            PCM8 ret = new PCM8() { Data = new byte[Data.Length] };
+            PCM32Signed ret = new PCM32Signed() { Data = new int[Data.Length] };
             Array.Copy(Data, ret.Data, Data.Length);
             return ret;
         }

@@ -9,7 +9,7 @@ namespace GotaSoundIO.IO {
     /// <summary>
     /// Reference.
     /// </summary>
-    public abstract class Reference<T> : IReadable, IWritable {
+    public abstract class Reference<T> : IReadable, IWriteable {
 
         /// <summary>
         /// Data contained by this reference.
@@ -190,7 +190,7 @@ namespace GotaSoundIO.IO {
                 if (Data as byte[] != null) {
                     w.Write(Data as byte[]);
                 } else {
-                    w.Write((IWritable)Data);
+                    w.Write((IWriteable)Data);
                 }
                 Size = w.Position - bak;
                 if (SetCurrentOffsetOnJump()) {

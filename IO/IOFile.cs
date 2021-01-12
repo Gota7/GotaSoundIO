@@ -11,7 +11,7 @@ namespace GotaSoundIO.IO {
     /// <summary>
     /// A file.
     /// </summary>
-    public abstract class IOFile : IReadable, IWritable {
+    public abstract class IOFile : IReadable, IWriteable {
 
         /// <summary>
         /// File version.

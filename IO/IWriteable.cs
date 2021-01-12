@@ -7,15 +7,15 @@ using System.Threading.Tasks;
 namespace GotaSoundIO.IO {
 
     /// <summary>
-    /// A readable item.
+    /// A writeable item.
     /// </summary>
-    public interface IReadable {
+    public interface IWriteable {
 
         /// <summary>
-        /// Read the item.
+        /// Write the item.
         /// </summary>
-        /// <param name="r">The file reader.</param>
-        void Read(FileReader r);
+        /// <param name="w">The file writer.</param>
+        void Write(FileWriter w);
 
     }
 

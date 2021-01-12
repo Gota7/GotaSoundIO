@@ -1,146 +1,156 @@
-using GotaSoundIO.IO;
+﻿using GotaSoundIO.IO;
+using GotaSoundIO.Sound.Encoding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace GotaSoundIO.Sound {
 
     /// <summary>
-    /// A standard PCM audio.
+    /// Signed 16-bit PCM audio.
     /// </summary>
-    public class PCM16 : AudioEncoding {
+    public class PCM16 : IAudioEncoding {
 
         /// <summary>
-        /// Sample data.
+        /// Data.
         /// </summary>
-        private short[] samples;
+        private short[] Data;
 
         /// <summary>
-        /// Samples.
+        /// Number of samples contained.
         /// </summary>
-        public short[] Samples => samples;
+        /// <returns>Number of samples.</returns>
+        public int SampleCount() => Data.Length;
 
         /// <summary>
-        /// Blank constructor.
+        /// Data size contained.
         /// </summary>
-        public PCM16() {}
-        
+        /// <returns>Data size.</returns>
+        public int DataSize() => SampleCount() * 2;
+
         /// <summary>
-        /// Create a PCM16 from samples.
+        /// Get the number of samples from a block size.
         /// </summary>
-        /// <param name="samples">The samples.</param>
-        public PCM16(short[] samples) {
-            this.samples = samples;
-            NumSamples = samples.Length;
-            DataSize = NumSamples * 2;
+        /// <param name="blockSize">Block size to get the number of samples from.</param>
+        /// <returns>Number of samples.</returns>
+        public int SamplesFromBlockSize(int blockSize) => blockSize / 2;
+
+        /// <summary>
+        /// Raw data.
+        /// </summary>
+        /// <returns>Raw data.</returns>
+        public object RawData() => Data;
+
+        /// <summary>
+        /// Read the raw data.
+        /// </summary>
+        /// <param name="r">File reader.</param>
+        /// <param name="numSamples">Number of samples.</param>
+        /// <param name="dataSize">Data size.</param>
+        public void ReadRaw(FileReader r, uint numSamples, uint dataSize) {
+            Data = r.ReadInt16s((int)(dataSize / 2));
         }
 
         /// <summary>
-        /// Get the PCM16 samples.
+        /// Write the raw data.
         /// </summary>
-        /// <returns>The PCM16 samples.</returns>
-        public override short[] ToPCM16() => samples;
+        /// <param name="w">File writer.</param>
+        public void WriteRaw(FileWriter w) {
+            w.Write(Data);
+        }
 
         /// <summary>
-        /// Set the PCM16 samples.
+        /// Convert from floating point PCM to the data.
         /// </summary>
-        public override void FromPCM16(short[] samples) { this.samples = samples; NumSamples = samples.Length; DataSize = NumSamples * 2; }
+        /// <param name="pcm">PCM data.</param>
+        /// <param name="encodingData">Encoding data.</param>
+        /// <param name="loopStart">Loop start.</param>
+        /// <param name="loopEnd">Loop end.</param>
+        public void FromFloatPCM(float[] pcm, object encodingData = null, int loopStart = -1, int loopEnd = -1) {
+            Data = pcm.Select(x => (short)(x * short.MaxValue)).ToArray();
+        }
 
         /// <summary>
-        /// Read the encoding.
+        /// Convert the data to floating point PCM.
         /// </summary>
-        /// <param name="r">The reader.</param>
-        public override void Read(FileReader r) {
-        	if (NumSamples == -1) {
-        	    samples = r.ReadInt16s(DataSize / 2);
-        	    NumSamples = DataSize / 2;
-            } else {
-            	samples = r.ReadInt16s(NumSamples);
-            	DataSize = NumSamples * 2;
+        /// <param name="decodingData">Decoding data.</param>
+        /// <returns>Floating point PCM data.</returns>
+        public float[] ToFloatPCM(object decodingData = null) => Data.Select(x => (float)x / short.MaxValue).ToArray();
+
+        /// <summary>
+        /// Trim audio data.
+        /// </summary>
+        /// <param name="totalSamples">Total number of samples to have in the end.</param>
+        public void Trim(int totalSamples) {
+            Data = Data.SubArray(0, totalSamples);
+        }
+
+        /// <summary>
+        /// Change block size.
+        /// </summary>
+        /// <param name="blocks">Audio blocks.</param>
+        /// <param name="newBlockSize">New block size.</param>
+        /// <returns>New blocks.</returns>
+        public List<IAudioEncoding> ChangeBlockSize(List<IAudioEncoding> blocks, int newBlockSize) {
+
+            //New blocks.
+            List<IAudioEncoding> newData = new List<IAudioEncoding>();
+
+            //Get all samples.
+            List<short> samples = new List<short>();
+            foreach (var b in blocks) {
+                samples.AddRange((short[])b.RawData());
             }
+            short[] s = samples.ToArray();
+
+            //Block size is -1.
+            if (newBlockSize == -1) {
+                newData.Add(new PCM16() { Data = s });
+            }
+
+            //Other.
+            else {
+                int samplesPerBlock = newBlockSize / 2;
+                int currSample = 0;
+                while (currSample < samples.Count) {
+                    int numToCopy = Math.Min(samples.Count - currSample, samplesPerBlock);
+                    newData.Add(new PCM16() { Data = s.SubArray(currSample, numToCopy) });
+                    currSample += numToCopy;
+                }
+            }
+
+            //Return data.
+            return newData;
+
         }
 
         /// <summary>
-        /// Write the encoding.
+        /// Get a property.
         /// </summary>
-        /// <param name="w">The writer.</param>
-        public override void Write(FileWriter w) {
-        	w.Write(samples);
-        }
+        /// <typeparam name="T">Property type.</typeparam>
+        /// <param name="propertyName">Property name.</param>
+        /// <returns>Retrieved property.</returns>
+        public T GetProperty<T>(string propertyName) { return default; }
 
         /// <summary>
-        /// Init samples from a number of blocks.
+        /// Set a property.
         /// </summary>
-        /// <param name="blockCount">The number of blocks.</param>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <param name="lastBlockSize">The size of the last block.</param>
-        /// <param name="lastBlockSamples">Samples in the last block.</param>
-        public override void InitFromBlocks(uint blockCount, uint blockSize, uint blockSamples, uint lastBlockSize, uint lastBlockSamples) {
-            samples = new short[(blockCount - 1) * blockSamples + lastBlockSamples];
-            NumSamples = (int)((blockCount - 1) * blockSamples + lastBlockSamples);
-            DataSize = NumSamples * 2;
-        }
+        /// <typeparam name="T">Property type to set.</typeparam>
+        /// <param name="value">Value to set.</param>
+        /// <param name="propertyName">Name of the property to set.</param>
+        public void SetProperty<T>(T value, string propertyName) {}
 
         /// <summary>
-        /// Get the number of blocks.
+        /// Duplicate the audio data.
         /// </summary>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <returns>The number of blocks.</returns>
-        public override uint NumBlocks(uint blockSize, uint blockSamples) {
-            uint num = (uint)samples.Length / blockSamples;
-            if (samples.Length % blockSamples != 0) { num++; }
-            return num;
-        }
-
-        /// <summary>
-        /// Get the size of the last block.
-        /// </summary>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <returns>The size of the last block.</returns>
-        public override uint LastBlockSize(uint blockSize, uint blockSamples) {
-            uint num = (uint)samples.Length % (blockSamples * 2);
-            if (num == 0) { num = blockSize; }
-            return num;
-        }
-
-        /// <summary>
-        /// Get the samples in the last block.
-        /// </summary>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        /// <returns>The amount of samples in the last block.</returns>
-        public override uint LastBlockSamples(uint blockSize, uint blockSamples) {
-            uint num = (uint)samples.Length % blockSamples;
-            if (num == 0) { num = blockSamples; }
-            return num;
-        }
-
-        /// <summary>
-        /// Read a block.
-        /// </summary>
-        /// <param name="r">The reader.</param>
-        /// <param name="blockNum"></param>
-        /// <param name="blockSize"></param>
-        /// <param name="blockSamples"></param>
-        public override void ReadBlock(FileReader r, int blockNum, uint blockSize, uint blockSamples) {
-            short[] arr = r.ReadInt16s(blockNum == NumBlocks(blockSize, blockSamples) - 1 ? (int)LastBlockSamples(blockSize, blockSamples) : (int)blockSamples);
-            arr.CopyTo(samples, blockSamples * blockNum);
-        }
-
-        /// <summary>
-        /// Write a block.
-        /// </summary>
-        /// <param name="w">The writer.</param>
-        /// <param name="blockNum">The number of blocks.</param>
-        /// <param name="blockSize">Size of each block.</param>
-        /// <param name="blockSamples">Samples per block.</param>
-        public override void WriteBlock(FileWriter w, int blockNum, uint blockSize, uint blockSamples) {
-            w.Write(samples.SubArray(blockNum * (int)blockSamples, blockNum == NumBlocks(blockSize, blockSamples) - 1 ? (int)LastBlockSamples(blockSize, blockSamples) : (int)blockSamples));
+        /// <returns>A copy of the audio data.</returns>
+        public IAudioEncoding Duplicate() {
+            PCM16 ret = new PCM16() { Data = new short[Data.Length] };
+            Array.Copy(Data, ret.Data, Data.Length);
+            return ret;
         }
 
     }

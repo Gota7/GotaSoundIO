@@ -9,7 +9,7 @@ namespace GotaSoundIO.IO {
     /// <summary>
     /// File header.
     /// </summary>
-    public abstract class FileHeader : IReadable, IWritable {
+    public abstract class FileHeader : IReadable, IWriteable {
 
         /// <summary>
         /// Magic.

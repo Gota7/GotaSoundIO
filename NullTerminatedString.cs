@@ -11,7 +11,7 @@ namespace GotaSoundIO {
     /// <summary>
     /// A null terminated string.
     /// </summary>
-    public class NullTerminatedString : IReadable, IWritable, IComparable<NullTerminatedString> {
+    public class NullTerminatedString : IReadable, IWriteable, IComparable<NullTerminatedString> {
 
         /// <summary>
         /// Actual data.

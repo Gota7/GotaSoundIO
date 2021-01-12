@@ -61,7 +61,9 @@ namespace GotaSoundIO.Sound.Playback {
             Riff.FromOtherStreamFile(s);
             MemoryStream = new MemoryStream(Riff.Write());
             WaveFileReader = new WaveFileReader(MemoryStream);
-            LoopStream = new LoopStream(this, WaveFileReader, Riff.Loops && Loop, s.LoopStart, s.LoopEnd);
+            SoundOut.Dispose();
+            SoundOut = new WaveOut();
+            LoopStream = new LoopStream(this, WaveFileReader, Riff.Loops && Loop, s.LoopStart, (Riff.Loops && Loop) ? s.LoopEnd : (uint)s.Audio.NumSamples);
             try {
                 SoundOut.Init(LoopStream);
             } catch (NAudio.MmException e) { SoundOut = new NullWavePlayer(); }
